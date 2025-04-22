@@ -26,7 +26,7 @@ class SodaSelector(tk.Tk):
         self.confidence_threshold = 0.7
         self.is_detecting = False  # Flag to control detection loop
 
-        self.cart = []
+        self.cart = ["Coke", "Pepsi"] # Example initial cart
         self.current_index = 0
 
         self.camera_frame = tk.Label(self, bg="black")
@@ -48,8 +48,11 @@ class SodaSelector(tk.Tk):
         self.start_robot_button = tk.Button(self, text="Start Robot Vision", font=("Helvetica", 14), command=self.toggle_detection)
         self.start_robot_button.pack(pady=15)
 
-        self.cart_button = tk.Button(self, text="View Cart (0)", font=("Helvetica", 12), command=self.view_cart_popup)
+        self.cart_button = tk.Button(self, text="View Cart (2)", font=("Helvetica", 12), command=self.view_cart_popup)
         self.cart_button.pack(pady=5)
+        self.update_cart_button()
+
+        self.detected_items_in_frame = set() # To avoid multiple popups for the same detection in a single frame
 
         self.update_camera_feed()
 
@@ -83,9 +86,9 @@ class SodaSelector(tk.Tk):
             # Run inference
             results = self.model(resized_frame, verbose=False)[0]
 
-            # Draw the bounding boxes on a copy of the frame to avoid modifying the displayed image directly
+            # Draw the bounding boxes and check for cart items
             detection_frame = resized_frame.copy()
-            detected_items = []
+            detected_in_current_frame = set()
             for box in results.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 conf = box.conf[0]
@@ -96,12 +99,21 @@ class SodaSelector(tk.Tk):
                 color = self.class_colors.get(label, (0, 255, 0))
 
                 if conf > self.confidence_threshold:
-                    detected_items.append(label)
+                    detected_in_current_frame.add(label)
                     label_text = f"{label} {conf:.2f}"
                     (text_w, text_h), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
                     cv2.rectangle(detection_frame, (x1, y1 - text_h - 10), (x1 + text_w, y1), color, -1)
                     cv2.putText(detection_frame, label_text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                     cv2.rectangle(detection_frame, (x1, y1), (x2, y2), color, 2)
+
+                    # Check if the detected item is in the cart and we haven't shown a popup for it in this frame
+                    if label in self.cart and label not in self.detected_items_in_frame:
+                        self.after(0, lambda l=label: self.show_found_popup(l))
+                        self.cart.remove(label)
+                        self.after(0, self.update_cart_button)
+                        self.detected_items_in_frame.add(label) # Mark as processed in this frame
+
+            self.detected_items_in_frame = detected_in_current_frame # Reset for the next frame
 
             rgb_detection_frame = cv2.cvtColor(detection_frame, cv2.COLOR_BGR2RGB)
             pil_detection_image = Image.fromarray(rgb_detection_frame)
@@ -110,6 +122,10 @@ class SodaSelector(tk.Tk):
             self.camera_frame.image = tk_detection_image
 
             time.sleep(0.03) # Small delay to prevent overwhelming the GUI
+
+    def show_found_popup(self, item):
+        messagebox.showinfo("Soda Found!", f"{item} has been detected!")
+        self.label_text.set(f"{item} found and removed from the list.")
 
     def update_camera_feed(self):
         ret, frame = self.cap.read()
@@ -166,19 +182,20 @@ class SodaSelector(tk.Tk):
 
         tk.Label(popup, text="Tap an item to remove it:", font=("Helvetica", 12), bg="white").pack(pady=10)
 
-        for item in self.cart:
+        for item in list(self.cart): # Iterate over a copy to allow modification
             item_button = tk.Button(
                 popup, text=f"🧃 {item}", font=("Helvetica", 12),
                 bg="lightgray", relief=tk.RAISED,
-                command=lambda i=item: self.remove_item(i, popup)
+                command=lambda i=item, p=popup: self.remove_item_from_cart_and_popup(i, p)
             )
             item_button.pack(pady=5, padx=10, fill=tk.X)
 
-    def remove_item(self, item, popup):
-        self.cart.remove(item)
-        self.update_cart_button()
-        popup.destroy()
-        self.view_cart_popup()  # Refresh the popup
+    def remove_item_from_cart_and_popup(self, item, popup):
+        if item in self.cart:
+            self.cart.remove(item)
+            self.update_cart_button()
+            popup.destroy()
+            self.view_cart_popup()  # Refresh the popup
 
     # The robot navigation logic can be triggered based on the cart contents
     def start_robot_search(self):
