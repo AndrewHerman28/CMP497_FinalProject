@@ -31,6 +31,7 @@ class SodaSelector(tk.Tk):
 
         self.camera_frame = tk.Label(self, bg="black")
         self.camera_frame.pack(pady=10)
+        self.current_image = None  # To hold the latest ImageTk.PhotoImage
 
         self.label_text = tk.StringVar()
         self.label = tk.Label(self, textvariable=self.label_text, font=("Helvetica", 14), bg="white")
@@ -80,8 +81,9 @@ class SodaSelector(tk.Tk):
             rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(rgb_frame)
             tk_image = ImageTk.PhotoImage(image=pil_image)
-            self.camera_frame.config(image=tk_image)
-            self.camera_frame.image = tk_image
+            self.current_image = tk_image # Keep a reference
+
+            self.camera_frame.config(image=self.current_image)
 
             # Run inference
             results = self.model(resized_frame, verbose=False)[0]
@@ -118,8 +120,8 @@ class SodaSelector(tk.Tk):
             rgb_detection_frame = cv2.cvtColor(detection_frame, cv2.COLOR_BGR2RGB)
             pil_detection_image = Image.fromarray(rgb_detection_frame)
             tk_detection_image = ImageTk.PhotoImage(image=pil_detection_image)
-            self.camera_frame.config(image=tk_detection_image)
-            self.camera_frame.image = tk_detection_image
+            self.current_image = tk_detection_image # Keep a reference to the detection image too
+            self.camera_frame.config(image=self.current_image)
 
             time.sleep(0.03) # Small delay to prevent overwhelming the GUI
 
@@ -134,8 +136,8 @@ class SodaSelector(tk.Tk):
             rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(rgb_frame)
             tk_image = ImageTk.PhotoImage(image=pil_image)
-            self.camera_frame.config(image=tk_image)
-            self.camera_frame.image = tk_image
+            self.current_image = tk_image # Keep a reference
+            self.camera_frame.config(image=self.current_image)
         self.after(30, self.update_camera_feed) # Update every 30 milliseconds
 
     def create_circle_button(self, parent, soda_name, color):
